@@ -31,7 +31,7 @@ for root, dirs, files in os.walk('.'):#os.walk() returns a generator, that creat
         root=root.replace('.',cwd)
         #f.write(root+","+folder+","+file+","+file_extension+"\n")
         nextFile={"root":root, "folder":folder, "filename":file, "extension":file_extension}
-        print(nextFile)(
+        print(nextFile)
         foundFilesList.append(nextFile)
         if(len(foundFilesList) >= limit):
             print("too much, stopping now")
@@ -39,4 +39,6 @@ for root, dirs, files in os.walk('.'):#os.walk() returns a generator, that creat
         
 print(str(len(foundFilesList))+ " files found in " + str(counterFolders)+ " folders")
         
+myFileStat=os.stat(foundFilesList[1]{"filename"})
+
 #f.close()
