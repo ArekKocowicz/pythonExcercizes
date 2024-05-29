@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import pytesseract
 
 def imageSummarizeRows(inputImage):
     (inputHeight, inputWidth, inputColorChannels)=inputImage.shape  #store input image size
@@ -8,11 +9,6 @@ def imageSummarizeRows(inputImage):
     inputImageMono=inputImage.sum(2)                                #convert from RGB to monochrome
     inputImageMono[inputImageMono<(3*255)]=0                        #truncate, all pixel not fully white will be 0
     inputImageMono[inputImageMono>0]=1                              #truncate, all pixels fully white will be 1
-
-    #plt.imshow(inputImageMono)
-    #plt.grid()
-    #plt.show()
-    #cv2.waitKey(0)
 
     rowSum=inputImageMono.sum(1)                                    #number of fully white pixels in each row of input image
     rowSumSigned=rowSum.astype(int)                                 #change to int because later convolution with signed numbers needed
@@ -26,33 +22,30 @@ def imageFindTextRows(rowSumSigned, textHeight):
     pattern=-1*np.ones(patternHeight)                               #this is pattern for convolution, it has (patternHeight-2) times -1 
     pattern[0]=1                                                    #and 1 at the begining and at the end
     pattern[patternHeight-1]=1
-    print(pattern)
-
-    myConv=np.convolve(rowSumSigned,pattern)                        #
-    convMaxima=np.where(myConv==patternHeight)[0]                   #ndarray of found patterns
-
+    #print(pattern)
+    myConv=np.convolve(rowSumSigned,pattern)                        #convolve pattern with rowSumSigned
+    convMaxima=np.where(myConv==patternHeight)[0]                   #find only ideal matches
     print(convMaxima)
-    return convMaxima
+    return convMaxima.tolist()                                      #return indexes as a list
+
+def imageCropRows(rowSumSigned, inputImage, textHeight):
+    convMaxima=[]                                                   #list for indexes of convolution maximums
+    croppedImages=[]                                                #list for cropped rows 
+    convMaxima=imageFindTextRows(rowSumSigned,textHeight)           
+    numberOfMaxima=len(convMaxima)
+    for i in range(numberOfMaxima):
+        xtop=round(convMaxima[i]-textHeight-1)
+        xbot=round(convMaxima[i]+1)
+        croppedImages.append(inputImage[xtop:xbot ,0:inputWidth])
+        print("appending")
+    return croppedImages
 
 
+inputImage = cv2.imread("sw21.png")                                 #read in the image
+(inputHeight, inputWidth, inputColorChannels)=inputImage.shape      #store input image size
+rowSumSigned=imageSummarizeRows(inputImage)                         #summarize row = try to predict where is text in input image
+#croppedImages2=[]
+croppedImages2=imageCropRows(rowSumSigned, inputImage, 10)   #crop rows with text to separate images
+croppedImages2.append(imageCropRows(rowSumSigned, inputImage, 11))   #crop rows with text to separate images
 
-
-inputImage = cv2.imread("sw20.png")                             #read in the image
-(inputHeight, inputWidth, inputColorChannels)=inputImage.shape  #store input image size
-rowSumSigned=imageSummarizeRows(inputImage)
-textHeight=11                                                   #expected text height
-convMaxima=imageFindTextRows(rowSumSigned,textHeight)
-(numberOfMaxima,)=convMaxima.shape
-
-
-for i in range(numberOfMaxima):
-    print(convMaxima[i])
-    xtop=round(convMaxima[i]-textHeight)
-    xbot=round(convMaxima[i])
-    localImage=inputImage[xtop:xbot ,0:inputWidth]
-    cv2.imshow("localImage",localImage)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-plt.plot(myConv, "r.")
-plt.show()
+print(len(croppedImages2))
