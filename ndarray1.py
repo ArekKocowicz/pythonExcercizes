@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import pytesseract
+import re
 
 def imageSummarize(inputImage, axis):
     (inputHeight, inputWidth, inputColorChannels)=inputImage.shape  #store input image size
@@ -24,26 +25,20 @@ def imageSummarize(inputImage, axis):
 # 1 if there was only white
 
 def imgAxisSum(inputImage, axis):
-    imgGray=cv2.cvtColor(inputImage, cv2.COLOR_BGR2GRAY)         #convert to grayscale
-    imgGrayInv=255-imgGray
-    (imgHeigh, imgWidth)=imgGray.shape                                  #store image height and width
-    #cv2.imshow("imgGray",imgGray)
-    #cv2.waitKey(0) 
-    #cv2.destroyAllWindows()
+    (imgHeigh, imgWidth, imgDepth)=inputImage.shape                     #store image height and width
+    imgGray=cv2.cvtColor(inputImage, cv2.COLOR_BGR2GRAY)                #convert to grayscale
+    imgGrayInv=255-imgGray                                              #invert grayscale
     axisSum=imgGray.sum(axis)                                           #calculate sum of each row or column in the image
     axisSumInv=imgGrayInv.sum(axis)
     fullBlack=np.zeros(axisSum.shape, int)
     fullWhite=np.zeros(axisSum.shape, int)
-    print(type(fullBlack))
-    print(fullBlack.dtype)
-    fullBlack[axisSum==0]=-1
+    fullBlack[axisSum==0]=1
     fullWhite[axisSumInv==0]=1
-    plt.plot(fullWhite)
-    plt.show()
-    #cv2.imshow("imgGrayInv",imgGrayInv)
-    #cv2.waitKey(0) 
-    #cv2.destroyAllWindows()
-
+    #plt.plot(fullWhite, label="fullWhite")
+    #plt.plot(fullBlack, label="fullBlack")
+    #plt.legend()
+    #plt.show()
+    return(fullWhite, fullBlack)
 
 
 def imageFindTextRows(rowSumSigned, textHeight):
@@ -71,7 +66,7 @@ def imageCropRows(rowSumSigned, inputImage, textHeight):
     return croppedImages
 
 
-inputFileName="sw21"
+inputFileName="./png/input/sw21"
 inputImage = cv2.imread(inputFileName+".png")                                 #read in the image
 imgAxisSum(inputImage,1)
 (inputHeight, inputWidth, inputColorChannels)=inputImage.shape      #store input image size
@@ -81,36 +76,45 @@ croppedImages2.extend(imageCropRows(rowSumSigned, inputImage, 11))  #crop rows w
 
 kernel = np.ones((5, 5), np.uint8)                                  #kernel for dilation
 
+report=""                                                           
+
 for i in range(len(croppedImages2)):
-    #print(f"iter{i}")
-    #print(type(croppedImages2[i]))
+    imgRow=croppedImages2[i]
+    imgRowShape=imgRow.shape
+    imgRowHeight=imgRowShape[0]
+    print(f"imgRowHeight = {imgRowHeight}")
     outputFileName=inputFileName+"_"+str(i)+".png"
-    cv2.imwrite(outputFileName,croppedImages2[i])
+    cv2.imwrite(outputFileName,imgRow)
 
-    #imageGray=cv2.cvtColor(croppedImages2[i], cv2.COLOR_BGR2GRAY)
-    #img_dilation = cv2.dilate(croppedImages2[i], kernel, iterations=1)
-    #outputFileName=inputFileName+"_"+str(i)+"gray"+".png"
-    #cv2.imwrite(outputFileName,imageGray)
-
-    #ret,th1 = cv2.threshold(imageGray,127,255,cv2.THRESH_BINARY)
-    #outputFileName=inputFileName+"_"+str(i)+"bin"+".png"
-    #cv2.imwrite(outputFileName,th1)
-
-    #img_dilation = cv2.erode(th1, kernel, iterations=1)
     erosion_size=7
     element = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * erosion_size + 1, 2 * erosion_size + 1),(erosion_size, erosion_size))
-    img_erode = cv2.erode(croppedImages2[i], element)
-    print(img_erode.shape)
-    #imageGray=cv2.cvtColor(img_erode, cv2.COLOR_BGR2GRAY)
-    #print(imageGray.shape)
-    sumCol=imageSummarize(img_erode, 0)                                    #summarize columns
-    print(sumCol.shape)
+    img_erode = cv2.erode(imgRow, element)
 
-    outputFileName=inputFileName+"_"+str(i)+"erode"+".png"
-    cv2.imwrite(outputFileName,img_erode)
-    #convert colors to make white easily recognizable
-    #plt.plot(sumCol)
-    #plt.show()
+    (fullWhite,fullBlack)=imgAxisSum(img_erode,0)
+    mydiff=np.diff(fullWhite) 
+    
+    #-1 in mydiff means, that this is begin of the text, 1 means that this is end
+    #if first non zero value i 1, than begining is at the pixel 0 
+    ends=np.where(mydiff==1)[0]
+    starts=np.where(mydiff==-1)[0]
+    ends_l=ends.tolist()
+    starts_l=starts.tolist()
+    if len(ends_l)>len(starts_l):                                   #if more ends than begins
+        starts_l.insert(0,0)
+    print(starts_l)
+    print(ends_l)
+    for k in range(len(starts_l)):
+        outputFileName=inputFileName+"_"+str(i)+"_"+str(k)+".png"
+        imgTextField=imgRow[0:imgRowHeight,starts_l[k]:ends_l[k]]
+        print(imgRow.shape)
+        print(imgTextField.shape)
+        cv2.imwrite(outputFileName,imgTextField)
+        #img_rgb = cv2.cvtColor(imgTextField, cv2.COLOR_BGR2RGB)
+        text = pytesseract.image_to_string(imgTextField, config="--psm 7")
+        #print(text)
+        textClean=res = re.sub(r'[\x00-\x1f]', '', text)
+        report+=inputFileName+"_"+str(i)+"_"+str(k)+".png,"+textClean+"\n"
 
-    
-    
+    with open("report.txt", "w") as new_file:
+        new_file.write(report)
+
